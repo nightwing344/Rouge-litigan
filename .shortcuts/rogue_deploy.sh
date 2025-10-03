@@ -27,7 +27,7 @@ if [ -z "$BRANCH" ] || [ "$BRANCH" == "null" ]; then
 fi
 echo "[*] Using branch: $BRANCH"
 
-# Setup Git remote if missing
+# Setup Git if missing
 if [ ! -d ".git" ]; then
   git init
   git checkout -b "$BRANCH"
@@ -36,25 +36,27 @@ else
   git remote set-url origin "https://$GITHUB_TOKEN@github.com/$REPO.git"
 fi
 
-# Commit & push (with auto-pull to resolve conflicts)
+# Commit & push (auto-sync with remote)
 git add .
 git commit -m "Auto-deploy $(date '+%Y-%m-%d %H:%M:%S')" || echo "[*] Nothing new."
-git pull origin $BRANCH --allow-unrelated-histories || true
+git pull origin $BRANCH --rebase --allow-unrelated-histories || true
 git push origin $BRANCH
 
 echo "[*] Code pushed. Waiting for GitHub Actions to finish..."
 
 # Poll workflow status
 while true; do
-  STATUS=$(curl -s -H "$AUTH" "$API/actions/runs?branch=$BRANCH&per_page=1" | jq -r '.workflow_runs[0].status')
-  CONCLUSION=$(curl -s -H "$AUTH" "$API/actions/runs?branch=$BRANCH&per_page=1" | jq -r '.workflow_runs[0].conclusion')
+  RUN_INFO=$(curl -s -H "$AUTH" "$API/actions/runs?branch=$BRANCH&per_page=1")
+  STATUS=$(echo "$RUN_INFO" | jq -r '.workflow_runs[0].status')
+  CONCLUSION=$(echo "$RUN_INFO" | jq -r '.workflow_runs[0].conclusion')
+  RUN_URL=$(echo "$RUN_INFO" | jq -r '.workflow_runs[0].html_url')
 
   if [ "$STATUS" == "completed" ]; then
     if [ "$CONCLUSION" == "success" ]; then
       echo "[*] Build finished successfully."
       break
     else
-      echo "[!] Build failed."
+      echo "[!] Build failed. Check logs: $RUN_URL"
       exit 1
     fi
   fi
