@@ -1,0 +1,80 @@
+name: Build Rogue-Litigan APK
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential \
+            libffi-dev \
+            libssl-dev \
+            libsqlite3-dev \
+            zlib1g-dev \
+            openjdk-17-jdk \
+            unzip \
+            git
+
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip
+          pip install cython buildozer
+
+      - name: Cache Buildozer .buildozer dir
+        uses: actions/cache@v3
+        with:
+          path: .buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}
+
+      - name: Cache Android SDK
+        uses: actions/cache@v3
+        with:
+          path: ~/.buildozer/android/platform
+          key: androidsdk-${{ runner.os }}
+          restore-keys: |
+            androidsdk-
+
+      - name: Build APK
+        run: |
+          buildozer -v android debug
+
+      - name: Upload APK to workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rogue-litigan-apk
+          path: bin/*.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "Rogue-Litigan Build ${{ github.run_number }}"
+          files: bin/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
